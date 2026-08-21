@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Domain data (stand-ins for Shopify orders / Stripe subscriptions) ---
+
+model Customer {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String
+  createdAt     DateTime       @default(now())
+  orders        Order[]
+  subscriptions Subscription[]
+  conversations Conversation[]
+}
+
+model Order {
+  id             String   @id @default(uuid())
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id])
+  externalId     String   @unique // simulated Shopify order id
+  status         String // pending | fulfilled | shipped | delivered | delayed
+  productName    String
+  amountCents    Int
+  currency       String   @default("GBP")
+  placedAt       DateTime
+  estimatedShip  DateTime?
+  deliveredAt    DateTime?
+  refundRequests RefundRequest[]
+
+  @@index([customerId])
+}
+
+model Subscription {
+  id            String   @id @default(uuid())
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  externalId    String   @unique // simulated Stripe subscription id
+  plan          String // monthly | annual
+  status        String // active | paused | cancelled | past_due
+  renewsAt      DateTime?
+  pausedUntil   DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([customerId])
+}
+
+model RefundRequest {
+  id             String   @id @default(uuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id])
+  idempotencyKey String   @unique
+  status         String // pending | eligible | ineligible | processed | failed
+  reason         String?
+  amountCents    Int?
+  createdAt      DateTime @default(now())
+  processedAt    DateTime?
+}
+
+// --- Conversation / agent state ---
+
+model Conversation {
+  id         String    @id @default(uuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id])
+  channel    String    @default("web") // web | app | email
+  status     String    @default("open") // open | escalated | resolved
+  createdAt  DateTime  @default(now())
+  messages   Message[]
+  escalations Escalation[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           String // customer | agent | system | human_agent
+  content        String
+  // Structured metadata for agent messages: confidence score, tool calls made,
+  // RAG sources cited. Kept as JSON so the schema can evolve without migrations.
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+}
+
+model ToolCall {
+  id             String   @id @default(uuid())
+  messageId      String?
+  conversationId String
+  toolName       String
+  input          Json
+  output         Json?
+  success        Boolean  @default(false)
+  latencyMs      Int?
+  retries        Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+}
+
+// --- Reliability / human-in-the-loop ---
+
+model Escalation {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  reason         String // low_confidence | high_risk_tool | explicit_request | tool_failure
+  confidence     Float?
+  draftResponse  String // what the AI would have said, for human review
+  finalResponse  String?
+  status         String       @default("pending") // pending | approved | edited | rejected
+  reviewedBy     String?
+  createdAt      DateTime     @default(now())
+  resolvedAt     DateTime?
+
+  @@index([conversationId])
+  @@index([status])
+}
+
+// --- RAG knowledge base ---
+
+model KnowledgeDocument {
+  id        String                 @id @default(uuid())
+  title     String
+  content   String
+  category  String // shipping | returns | product | subscription
+  embedding Unsupported("vector(1536)")?
+  createdAt DateTime               @default(now())
+}
+
+// --- Inbound webhooks ---
+
+model WebhookEvent {
+  id               String    @id @default(uuid())
+  provider         String // shopify | stripe
+  externalEventId  String // the delivery id the provider guarantees is unique per event
+  eventType        String
+  payload          Json
+  status           String    @default("received") // received | processed | failed
+  receivedAt       DateTime  @default(now())
+  processedAt      DateTime?
+
+  @@unique([provider, externalEventId])
+}
+
+// --- Observability / cost tracking ---
+
+model LlmUsageLog {
+  id             String   @id @default(uuid())
+  conversationId String?
+  provider       String // anthropic | openai | mock
+  model          String
+  inputTokens    Int
+  outputTokens   Int
+  estimatedCostUsd Float
+  latencyMs      Int
+  purpose        String // chat_response | embedding | confidence_check
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
