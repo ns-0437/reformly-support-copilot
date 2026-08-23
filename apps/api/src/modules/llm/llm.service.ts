@@ -11,7 +11,7 @@ export interface ChatTurnResult {
   toolCalls: ToolExecutionResult[];
   structuredOutputRetries: number;
   usage: { inputTokens: number; outputTokens: number };
-  provider: 'anthropic';
+  provider: 'anthropic' | 'mock';
 }
 
 const MAX_TOOL_ITERATIONS = 4;
@@ -26,7 +26,8 @@ Be honest in selfReportedConfidence: if the customer's request is ambiguous, a t
 @Injectable()
 export class LlmService {
   private readonly logger = new Logger(LlmService.name);
-  private readonly client: Anthropic;
+  private readonly client: Anthropic | null;
+  private readonly mock: boolean;
   private readonly model: string;
 
   constructor(
@@ -34,8 +35,11 @@ export class LlmService {
     private readonly tools: ToolsService,
     private readonly prisma: PrismaService,
   ) {
+    this.mock = this.config.get<boolean>('llm.mock') ?? true;
     this.model = this.config.get<string>('llm.model') ?? 'claude-sonnet-5';
-    this.client = new Anthropic({ apiKey: this.config.get<string>('llm.apiKey') });
+    this.client = this.mock
+      ? null
+      : new Anthropic({ apiKey: this.config.get<string>('llm.apiKey') });
   }
 
   async generateResponse(
@@ -43,16 +47,18 @@ export class LlmService {
     history: { role: 'user' | 'assistant'; content: string }[],
   ): Promise<ChatTurnResult> {
     const startedAt = Date.now();
-    const result = await this.runAnthropicLoop(conversationId, history);
+    const result = this.mock
+      ? await this.runMockLoop(conversationId, history)
+      : await this.runAnthropicLoop(conversationId, history);
 
     await this.prisma.llmUsageLog.create({
       data: {
         conversationId,
         provider: result.provider,
-        model: this.model,
+        model: this.mock ? 'mock-rule-engine' : this.model,
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
-        estimatedCostUsd: this.estimateCostUsd(result.usage),
+        estimatedCostUsd: this.estimateCostUsd(result.usage, result.provider),
         latencyMs: Date.now() - startedAt,
         purpose: 'chat_response',
       },
@@ -61,7 +67,8 @@ export class LlmService {
     return result;
   }
 
-  private estimateCostUsd(usage: { inputTokens: number; outputTokens: number }) {
+  private estimateCostUsd(usage: { inputTokens: number; outputTokens: number }, provider: string) {
+    if (provider === 'mock') return 0;
     // Rough Claude Sonnet-class pricing per 1M tokens; swap for the real rate
     // card if this ships. Kept explicit rather than hidden inside a log line
     // because "cost tracking" is a first-class requirement, not an afterthought.
@@ -76,6 +83,8 @@ export class LlmService {
     conversationId: string,
     history: { role: 'user' | 'assistant'; content: string }[],
   ): Promise<ChatTurnResult> {
+    if (!this.client) throw new Error('Anthropic client not configured');
+
     const messages: Anthropic.MessageParam[] = history.map((h) => ({
       role: h.role,
       content: h.content,
@@ -187,6 +196,110 @@ export class LlmService {
       structuredOutputRetries,
       usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
       provider: 'anthropic',
+    };
+  }
+
+  // --- Deterministic mock loop (no API key required) ---
+  //
+  // Runs the exact same ToolsService/RagService code paths as the real loop —
+  // only the "which tool to call" decision is rule-based instead of model-driven.
+  // This keeps the reliability/escalation/BullMQ/webhook machinery fully
+  // exercisable offline; flip MOCK_LLM=false + set ANTHROPIC_API_KEY to swap
+  // in real Claude without touching any other module.
+
+  private async runMockLoop(
+    conversationId: string,
+    history: { role: 'user' | 'assistant'; content: string }[],
+  ): Promise<ChatTurnResult> {
+    const latestMessage = [...history].reverse().find((h) => h.role === 'user')?.content ?? '';
+    const toolCalls: ToolExecutionResult[] = [];
+
+    const orderIdMatch = latestMessage.match(/RFM-\d+/i);
+    const emailMatch = latestMessage.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    const lower = latestMessage.toLowerCase();
+
+    let final: FinalResponse;
+
+    if (lower.includes('refund') && orderIdMatch) {
+      const result = await this.tools.execute(conversationId, 'check_refund_eligibility', {
+        orderExternalId: orderIdMatch[0].toUpperCase(),
+        reason: latestMessage,
+      });
+      toolCalls.push(result);
+      const eligible = (result.output as any)?.eligible;
+      final = {
+        responseText: eligible
+          ? `Good news — order ${orderIdMatch[0].toUpperCase()} is eligible for a refund. I've started the process; you'll see it reflected within 5-7 business days.`
+          : `I checked order ${orderIdMatch[0].toUpperCase()} and it doesn't currently qualify for an automatic refund (${(result.output as any)?.reason ?? 'unknown reason'}). I'm looping in a teammate to take a closer look.`,
+        selfReportedConfidence: result.success ? (eligible ? 0.88 : 0.7) : 0.25,
+        citedSourceIds: [],
+        requestsHumanReview: !result.success || !eligible,
+        riskFlags: ['refund'],
+      };
+    } else if ((lower.includes('pause') || lower.includes('cancel')) && lower.includes('subscription')) {
+      final = {
+        responseText:
+          "I can help pause your subscription. Since this changes your billing, I'm getting a teammate to confirm the details with you before it's applied.",
+        selfReportedConfidence: 0.55,
+        citedSourceIds: [],
+        requestsHumanReview: true,
+        riskFlags: ['billing_change', 'account_cancellation'],
+      };
+    } else if (orderIdMatch) {
+      const result = await this.tools.execute(conversationId, 'get_order_status', {
+        orderExternalId: orderIdMatch[0].toUpperCase(),
+      });
+      toolCalls.push(result);
+      const found = (result.output as any)?.found;
+      final = {
+        responseText: found
+          ? `Order ${orderIdMatch[0].toUpperCase()} is currently "${(result.output as any).status}". ${(result.output as any).estimatedShip ? `Estimated ship date: ${new Date((result.output as any).estimatedShip).toDateString()}.` : ''}`
+          : `I couldn't find order ${orderIdMatch[0].toUpperCase()} — could you double check the order number?`,
+        selfReportedConfidence: result.success && found ? 0.9 : 0.4,
+        citedSourceIds: [],
+        requestsHumanReview: !result.success,
+        riskFlags: [],
+      };
+    } else if (emailMatch) {
+      const result = await this.tools.execute(conversationId, 'get_subscription_status', {
+        customerEmail: emailMatch[0],
+      });
+      toolCalls.push(result);
+      const found = (result.output as any)?.found;
+      final = {
+        responseText: found
+          ? `I found your account. Your subscription status: ${JSON.stringify((result.output as any).subscriptions.map((s: any) => ({ plan: s.plan, status: s.status })))}.`
+          : `I couldn't find an account for ${emailMatch[0]} — could you confirm the email on file?`,
+        selfReportedConfidence: result.success && found ? 0.85 : 0.4,
+        citedSourceIds: [],
+        requestsHumanReview: !result.success,
+        riskFlags: [],
+      };
+    } else {
+      const searchResult = await this.tools.execute(conversationId, 'search_knowledge_base', {
+        query: latestMessage,
+      });
+      toolCalls.push(searchResult);
+      const results = ((searchResult.output as any)?.results ?? []) as { id: string; title: string; content: string; similarity: number }[];
+      const top = results[0];
+      const confident = top && top.similarity > 0.15;
+      final = {
+        responseText: confident
+          ? `${top.content}`
+          : "I'm not fully sure about that one — let me get a teammate to confirm and get back to you.",
+        selfReportedConfidence: confident ? Math.min(0.9, 0.5 + top.similarity) : 0.35,
+        citedSourceIds: confident ? [top.id] : [],
+        requestsHumanReview: !confident,
+        riskFlags: [],
+      };
+    }
+
+    return {
+      final,
+      toolCalls,
+      structuredOutputRetries: 0,
+      usage: { inputTokens: latestMessage.length, outputTokens: final.responseText.length },
+      provider: 'mock',
     };
   }
 }
