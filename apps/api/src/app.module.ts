@@ -6,6 +6,7 @@ import { RagModule } from './modules/rag/rag.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { EscalationModule } from './modules/escalation/escalation.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ChatModule } from './modules/chat/chat.module';
     JobsModule,
     EscalationModule,
     ChatModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}
