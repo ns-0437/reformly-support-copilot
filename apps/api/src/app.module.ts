@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma.module';
 import { RagModule } from './modules/rag/rag.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { EscalationModule } from './modules/escalation/escalation.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { EscalationModule } from './modules/escalation/escalation.module';
     RagModule,
     JobsModule,
     EscalationModule,
+    ChatModule,
   ],
 })
 export class AppModule {}

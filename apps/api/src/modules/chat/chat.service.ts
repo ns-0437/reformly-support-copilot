@@ -1,0 +1,102 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma.service';
+import { LlmService } from '../llm/llm.service';
+import { ReliabilityService } from '../reliability/reliability.service';
+import { EscalationService } from '../escalation/escalation.service';
+import { SendMessageDto } from './dto/send-message.dto';
+
+export interface ChatTurnResponse {
+  conversationId: string;
+  status: 'answered' | 'escalated';
+  message: string;
+  confidence: number;
+  escalationId?: string;
+}
+
+@Injectable()
+export class ChatService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llm: LlmService,
+    private readonly reliability: ReliabilityService,
+    private readonly escalation: EscalationService,
+  ) {}
+
+  async handleMessage(dto: SendMessageDto): Promise<ChatTurnResponse> {
+    const customer = await this.prisma.customer.findUnique({ where: { email: dto.customerEmail.toLowerCase() } });
+    if (!customer) throw new NotFoundException(`No customer with email ${dto.customerEmail}`);
+
+    const conversation = dto.conversationId
+      ? await this.prisma.conversation.findUniqueOrThrow({ where: { id: dto.conversationId } })
+      : await this.prisma.conversation.create({ data: { customerId: customer.id } });
+
+    await this.prisma.message.create({
+      data: { conversationId: conversation.id, role: 'customer', content: dto.message },
+    });
+
+    const priorMessages = await this.prisma.message.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const history = priorMessages
+      .filter((m) => m.role === 'customer' || m.role === 'agent')
+      .map((m) => ({ role: (m.role === 'customer' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }));
+
+    const turn = await this.llm.generateResponse(conversation.id, history);
+    const assessment = this.reliability.assess(turn.final, turn.toolCalls);
+
+    if (assessment.shouldEscalate) {
+      const escalationRecord = await this.escalation.create(conversation.id, turn.final.responseText, assessment);
+      await this.prisma.conversation.update({ where: { id: conversation.id }, data: { status: 'escalated' } });
+      await this.prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'agent',
+          content: '[held for human review]',
+          metadata: {
+            draftResponse: turn.final.responseText,
+            confidence: assessment.combinedConfidence,
+            reason: assessment.reason,
+            toolCalls: turn.toolCalls.map((t) => ({ tool: t.toolName, success: t.success })),
+          } as any,
+        },
+      });
+
+      return {
+        conversationId: conversation.id,
+        status: 'escalated',
+        message: 'A teammate is reviewing this and will respond shortly.',
+        confidence: assessment.combinedConfidence,
+        escalationId: escalationRecord.id,
+      };
+    }
+
+    await this.prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        role: 'agent',
+        content: turn.final.responseText,
+        metadata: {
+          confidence: assessment.combinedConfidence,
+          citedSourceIds: turn.final.citedSourceIds,
+          toolCalls: turn.toolCalls.map((t) => ({ tool: t.toolName, success: t.success })),
+        } as any,
+      },
+    });
+
+    return {
+      conversationId: conversation.id,
+      status: 'answered',
+      message: turn.final.responseText,
+      confidence: assessment.combinedConfidence,
+    };
+  }
+
+  async getConversation(conversationId: string) {
+    return this.prisma.conversation.findUniqueOrThrow({
+      where: { id: conversationId },
+      include: { messages: { orderBy: { createdAt: 'asc' } }, customer: true },
+    });
+  }
+}
