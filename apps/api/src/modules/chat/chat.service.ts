@@ -26,9 +26,13 @@ export class ChatService {
     const customer = await this.prisma.customer.findUnique({ where: { email: dto.customerEmail.toLowerCase() } });
     if (!customer) throw new NotFoundException(`No customer with email ${dto.customerEmail}`);
 
-    const conversation = dto.conversationId
-      ? await this.prisma.conversation.findUniqueOrThrow({ where: { id: dto.conversationId } })
-      : await this.prisma.conversation.create({ data: { customerId: customer.id } });
+    let conversation;
+    if (dto.conversationId) {
+      conversation = await this.prisma.conversation.findUnique({ where: { id: dto.conversationId } });
+      if (!conversation) throw new NotFoundException(`No conversation with id ${dto.conversationId}`);
+    } else {
+      conversation = await this.prisma.conversation.create({ data: { customerId: customer.id } });
+    }
 
     await this.prisma.message.create({
       data: { conversationId: conversation.id, role: 'customer', content: dto.message },
@@ -94,9 +98,11 @@ export class ChatService {
   }
 
   async getConversation(conversationId: string) {
-    return this.prisma.conversation.findUniqueOrThrow({
+    const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { messages: { orderBy: { createdAt: 'asc' } }, customer: true },
     });
+    if (!conversation) throw new NotFoundException(`No conversation with id ${conversationId}`);
+    return conversation;
   }
 }
