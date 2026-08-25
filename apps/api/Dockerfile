@@ -3,6 +3,9 @@
 
 FROM node:20-slim AS builder
 WORKDIR /app
+# Prisma's query engine needs a matching OpenSSL on the base image, or it
+# silently guesses wrong and fails to connect at runtime.
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
@@ -16,6 +19,7 @@ RUN npm run build --workspace=apps/api
 FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
