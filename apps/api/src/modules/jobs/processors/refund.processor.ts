@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../../../prisma.service';
 import { StripeProvider } from '../../tools/providers/stripe.provider';
 import { QUEUE_NAMES } from '../queue.constants';
+import { captureException } from '../../../observability/sentry';
 
 interface RefundJobData {
   refundRequestId: string;
@@ -70,6 +71,9 @@ export class RefundProcessor extends WorkerHost {
           where: { id: refundRequest.id },
           data: { status: 'failed' },
         });
+        // Only page/report once retries are exhausted — a transient blip
+        // that recovers on its own isn't a production failure worth noise for.
+        captureException(err, { refundRequestId: refundRequest.id, attempts: job.attemptsMade + 1 });
       }
       // Re-throw so BullMQ applies the configured retry/backoff policy.
       throw err;
