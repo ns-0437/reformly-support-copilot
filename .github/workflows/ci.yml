@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: ankane/pgvector:v0.5.1
+        env:
+          POSTGRES_USER: reformly
+          POSTGRES_PASSWORD: reformly
+          POSTGRES_DB: reformly_support
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reformly"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://reformly:reformly@localhost:5432/reformly_support?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      MOCK_LLM: "true"
+      MOCK_EMBEDDINGS: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      # pgvector's extension isn't enabled by default on a fresh container —
+      # migrations that create the KnowledgeDocument.embedding column depend on it.
+      - name: Enable pgvector extension
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          PGPASSWORD=reformly psql -h localhost -U reformly -d reformly_support -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Prisma generate
+        run: npm run prisma:generate --workspace=apps/api
+
+      - name: Apply migrations
+        run: npm run prisma:deploy --workspace=apps/api
+
+      - name: Build
+        run: npm run build --workspace=apps/api
+
+      - name: Unit tests
+        run: npm test --workspace=apps/api -- --ci
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build --workspace=apps/web
