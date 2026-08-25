@@ -15,6 +15,10 @@ import { RefundQueueProducer } from './refund-queue.producer';
         connection: {
           host: config.get<string>('redis.host'),
           port: config.get<number>('redis.port'),
+          password: config.get<string>('redis.password'),
+          // Managed Redis (Upstash, Memorystore w/ in-transit encryption, etc.)
+          // requires TLS on the standard port; local Docker Redis does not.
+          tls: config.get<boolean>('redis.tls') ? {} : undefined,
         },
       }),
     }),
