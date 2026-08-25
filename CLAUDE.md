@@ -74,3 +74,13 @@ Default `.env` runs with `MOCK_LLM=true` / `MOCK_EMBEDDINGS=true` — no API
 keys required to see the full pipeline (tool-calling, RAG, escalation,
 background jobs) working. Set `ANTHROPIC_API_KEY` and `MOCK_LLM=false` to
 swap in real Claude for the actual interview demo.
+
+## Live deployment
+
+- **Frontend**: https://web-mu-kohl-77.vercel.app (Vercel, Next.js)
+- **Backend**: https://reformly-api-721473915245.asia-south1.run.app (Cloud Run, `asia-south1`)
+- **Database**: Supabase Postgres (`ap-south-1`, pgvector enabled) — project ref `cklvgohqlbkanhwmeiop`
+- **Redis**: Upstash (`asia-northeast1`, TLS)
+- Cloud Run service runs with `--no-cpu-throttling` and `MOCK_LLM=true`.
+- Redeploy the API after a code change: `docker build -f apps/api/Dockerfile -t asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest . && docker push ... && gcloud run deploy reformly-api --image=... --project=reformly-support-copilot --region=asia-south1`
+- Redeploy the dashboard: `cd apps/web && npx vercel --prod`
