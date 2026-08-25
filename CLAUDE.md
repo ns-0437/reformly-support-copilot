@@ -84,3 +84,8 @@ swap in real Claude for the actual interview demo.
 - Cloud Run service runs with `--no-cpu-throttling` and `MOCK_LLM=true`.
 - Redeploy the API after a code change: `docker build -f apps/api/Dockerfile -t asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest . && docker push ... && gcloud run deploy reformly-api --image=... --project=reformly-support-copilot --region=asia-south1`
 - Redeploy the dashboard: `cd apps/web && npx vercel --prod`
+
+### Production incidents hit deploying this (good interview material — this is exactly the "handling unreliable APIs in production" scenario the JD asks about)
+
+**Incident 1 — refund jobs created but never processed, Cloud Run's default CPU throttling.**
+Cloud Run only allocates CPU to a container while it's actively serving an HTTP request by default. `RefundProcessor` (the BullMQ worker) runs in the same process as the HTTP server but processes jobs asynchronously *between* requests — so it was being starved of CPU and never got to run. Fix: `--no-cpu-throttling` (CPU always allocated) so there's always CPU available to process the queue whenever the container is running. Diagnosed by checking `RefundRequest.status` directly in Supabase — stuck at `eligible`, never advancing to `processed`, with zero corresponding error logs.
