@@ -35,3 +35,35 @@ Nothing here is a default choice — each tool earns its place against something
 | Supabase | Managed Postgres | Postgres with pgvector enabled out of the box, so the database and the RAG store are provisioned together, not stitched from two vendors. |
 | Upstash | Managed Redis | Serverless Redis reachable over TLS from anywhere, sized for a queue that handles one refund job at a time, not a cache under real load. |
 | GitHub Actions | CI | Every push builds against real Postgres and Redis service containers and runs the Prisma migration for real, so "it migrates" is verified, not assumed. |
+
+## Architecture
+
+How a message actually moves through the system: one request triggers two things at once — an answer for the customer, and, if a refund is involved, a background job that finishes independently of the chat reply.
+
+```mermaid
+flowchart LR
+    subgraph SYNC["Synchronous — one HTTP request/response"]
+        A[Browser<br/>Vercel · Next.js] -->|POST /chat/message| B[Chat API<br/>Cloud Run]
+        B -->|generate| C[Tool-calling loop<br/>Claude / mock]
+        C -->|tool_use| D[Tools + RAG<br/>retry + backoff]
+        D -->|result| E{Reliability score}
+        E -->|confident| A
+        E -->|"low confidence /<br/>high-risk / failed tool"| F[Escalation queue<br/>human review]
+        F -->|resolves| A
+    end
+    subgraph ASYNC["Asynchronous — finishes after the reply is sent"]
+        G[(Redis queue<br/>Upstash · BullMQ)]
+        H[Refund worker<br/>idempotent · resumable]
+        D -->|enqueue refundId| G
+        G --> H
+    end
+    P[(Postgres<br/>Supabase · pgvector)]
+    B -.->|history| P
+    D -.->|lookups + search| P
+    H -.->|status → processed| P
+```
+
+1. **The model can't just answer.** Every turn must end by calling a `submit_final_response` tool carrying a confidence number, not free text — that's what makes the next step possible.
+2. **Confidence is computed, not trusted.** The model's own number is blended 60/40 with whether its tool calls actually succeeded. A model that "sounds sure" after a failed lookup still gets overridden.
+3. **Risk beats confidence.** Anything that touches billing (pausing a subscription) is escalated to a human automatically, regardless of how confident the model is.
+4. **Money moves off the request path.** Refund eligibility is decided synchronously; the payment-processor call happens in a queued job so a slow provider never makes the chat hang.
