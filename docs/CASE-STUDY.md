@@ -115,3 +115,25 @@ flowchart TD
 ```
 
 Worked perfectly locally — bare Node, and even a local Docker container against real Upstash. Only reproduced on Cloud Run's specific network path, which is exactly the kind of environment-specific failure that's easy to miss without testing against the real deployment target.
+
+### 3. Deploy failed: "empty host in database URL"
+
+**Signal** — Prisma refused to boot with a `P1013` error, even though the connection string was correct.
+
+**Root cause** — `gcloud run deploy --set-env-vars` splits its argument on commas. A database password containing one silently truncated the URL mid-string.
+
+**Fix** — switched to `--env-vars-file` with a YAML file, which handles special characters correctly.
+
+### 4. git push rejected on the CI workflow file
+
+**Signal** — GitHub refused the push with *"refusing to allow an OAuth App to create or update workflow… without `workflow` scope."*
+
+**Root cause** — the CLI's OAuth token was authorized for repo access only; `.github/workflows/*` specifically requires a broader scope.
+
+**Fix** — `gh auth refresh -s workflow`, a one-time browser approval, then the push went through.
+
+### Smaller things caught along the way
+
+- **Prisma + slim Docker image** — the query engine couldn't detect OpenSSL on `node:20-slim`; installing it explicitly in both build stages fixed engine selection.
+- **Unused dependencies** — `nestjs-pino` and `@nestjs/testing` were installed but never wired up; removed rather than left as dead weight.
+- **Silent validation stripping** — a global `whitelist: true` pipe would have silently dropped every request body field that lacked a `class-validator` decorator; caught before it shipped by adding real DTOs.
