@@ -67,3 +67,17 @@ flowchart LR
 2. **Confidence is computed, not trusted.** The model's own number is blended 60/40 with whether its tool calls actually succeeded. A model that "sounds sure" after a failed lookup still gets overridden.
 3. **Risk beats confidence.** Anything that touches billing (pausing a subscription) is escalated to a human automatically, regardless of how confident the model is.
 4. **Money moves off the request path.** Refund eligibility is decided synchronously; the payment-processor call happens in a queued job so a slow provider never makes the chat hang.
+
+## Build journey
+
+Real, sequential commit history — each phase below is a working state, not a checkpoint invented after the fact.
+
+1. **Foundation** — monorepo scaffold, the full Prisma schema for the domain (customers, orders, subscriptions, conversations, escalations), and a bare NestJS app wired to Postgres.
+2. **Simulated reality** — Shopify and Stripe stand-ins that deliberately fail and time out at a configurable rate, wrapped in one shared retry-with-backoff helper, so unreliable APIs are a first-class condition, not an afterthought.
+3. **Knowledge & jobs** — pgvector-backed policy search, plus the idempotent, resumable BullMQ pipeline that actually moves refund money — deciding and processing kept as two separate steps, on purpose.
+4. **The brain** — the Claude tool-calling loop with Zod-validated structured output and a retry loop for malformed responses, plus a deterministic mock mode that exercises the exact same code path with no API key.
+5. **Trust engine** — the confidence-blending formula, the high-risk auto-escalation policy, and the human review queue where a person, not the model, has the last word on anything escalated.
+6. **Wiring it together** — end-to-end chat orchestration, idempotent inbound webhooks keyed on the provider's own event id, cost/usage logging on every LLM call, and seed data to develop against.
+7. **Dashboard** — a Next.js app with three screens: a chat tester, the escalation review queue with approve/edit/reject, and a live analytics view of cost and tool reliability.
+8. **Hardening** — unit tests for the retry helper and the reliability scorer, a real bug fix (an unknown conversation ID was leaking a raw 500 instead of a clean 404), Sentry error tracking, and a GitHub Actions pipeline that runs migrations against real Postgres and Redis containers on every push.
+9. **Shipping it** — a production Docker image, a Cloud Run service, a Supabase database, an Upstash queue, and a Vercel frontend — and the incidents below, all only visible once the app was actually live.
