@@ -93,3 +93,25 @@ All of these only showed up after deploying — none reproduced locally. That's 
 **Root cause** — Cloud Run only allocates CPU to a container while it's serving a request, by default. The BullMQ worker runs in the same process but processes jobs *between* requests — it was being starved of CPU entirely.
 
 **Fix** — `--no-cpu-throttling`. CPU stays allocated whenever the container is running, request or not.
+
+### 2. The same jobs, hanging instead of erroring
+
+**Signal** — even after fixing the CPU throttling, the request that enqueues a job hung for minutes — not slow, *stuck*, with zero errors.
+
+**Root cause** — Upstash's hostname resolves to both an A (IPv4) and AAAA (IPv6) record. Cloud Run's route to the IPv6 address was broken — the handshake never completed and never failed either.
+
+**Fix** — force `family: 4` on the Redis connection, plus `maxRetriesPerRequest: null` per BullMQ's own documented requirement.
+
+```mermaid
+flowchart TD
+    subgraph before["Before"]
+        A1[Cloud Run] -->|DNS lookup| B1[AAAA · IPv6]
+        B1 -.->|"route broken — no SYN, no RST"| C1[Hangs forever]
+    end
+    subgraph after["After"]
+        A2[Cloud Run] -->|"family: 4"| B2[A · IPv4]
+        B2 -->|TLS connect| C2[Connects instantly]
+    end
+```
+
+Worked perfectly locally — bare Node, and even a local Docker container against real Upstash. Only reproduced on Cloud Run's specific network path, which is exactly the kind of environment-specific failure that's easy to miss without testing against the real deployment target.
