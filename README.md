@@ -7,6 +7,8 @@ risky or uncertain, and the production concerns that come with it — retries
 on flaky APIs, idempotent webhooks, resumable background jobs, structured
 output validation, and cost tracking.
 
+**Live:** [app](https://web-mu-kohl-77.vercel.app) · [API](https://reformly-api-721473915245.asia-south1.run.app) · [full case study with architecture diagrams and production incidents](docs/CASE-STUDY.md)
+
 ## Stack
 
 NestJS · PostgreSQL + pgvector · Prisma · BullMQ/Redis · Anthropic Claude
