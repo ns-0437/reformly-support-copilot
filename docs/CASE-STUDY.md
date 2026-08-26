@@ -81,3 +81,15 @@ Real, sequential commit history — each phase below is a working state, not a c
 7. **Dashboard** — a Next.js app with three screens: a chat tester, the escalation review queue with approve/edit/reject, and a live analytics view of cost and tool reliability.
 8. **Hardening** — unit tests for the retry helper and the reliability scorer, a real bug fix (an unknown conversation ID was leaking a raw 500 instead of a clean 404), Sentry error tracking, and a GitHub Actions pipeline that runs migrations against real Postgres and Redis containers on every push.
 9. **Shipping it** — a production Docker image, a Cloud Run service, a Supabase database, an Upstash queue, and a Vercel frontend — and the incidents below, all only visible once the app was actually live.
+
+## Production incidents
+
+All of these only showed up after deploying — none reproduced locally. That's the whole argument for testing against the real target, not just localhost.
+
+### 1. Refund jobs created, never processed
+
+**Signal** — a refund's status sat at `eligible` forever in Supabase. No error, anywhere, in any log.
+
+**Root cause** — Cloud Run only allocates CPU to a container while it's serving a request, by default. The BullMQ worker runs in the same process but processes jobs *between* requests — it was being starved of CPU entirely.
+
+**Fix** — `--no-cpu-throttling`. CPU stays allocated whenever the container is running, request or not.
