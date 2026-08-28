@@ -282,7 +282,11 @@ export class LlmService {
       toolCalls.push(searchResult);
       const results = ((searchResult.output as any)?.results ?? []) as { id: string; title: string; content: string; similarity: number }[];
       const top = results[0];
-      const confident = top && top.similarity > 0.15;
+      // Calibrated against the actual seeded KB content: genuine topic
+      // matches score ~0.16-0.53 similarity, off-topic/adversarial input
+      // scores ~0.05-0.08 (see docs/CASE-STUDY.md for the numbers). 0.12
+      // sits with margin on both sides of that gap.
+      const confident = top && top.similarity > 0.12;
       final = {
         responseText: confident
           ? `${top.content}`

@@ -8,9 +8,29 @@ const EMBEDDING_DIM = 1536;
 // outside the Nest DI container, so this intentionally doesn't import app
 // code. If MOCK_EMBEDDINGS=false in your .env, re-run `npm run seed` for the
 // KnowledgeDocument rows only after wiring a real embed call here.
+//
+// The stopword list MUST stay identical to embeddings.service.ts — these
+// embeddings and a runtime query embedding are compared by cosine similarity,
+// so seeding with a different token filter than search time silently breaks
+// relevance instead of erroring.
+const STOPWORDS = new Set([
+  'a', 'an', 'the', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him',
+  'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their', 'this',
+  'that', 'these', 'those', 'is', 'am', 'are', 'was', 'were', 'be', 'been',
+  'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+  'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'to', 'of',
+  'in', 'on', 'at', 'by', 'for', 'with', 'about', 'against', 'between',
+  'into', 'through', 'during', 'before', 'after', 'above', 'below', 'from',
+  'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then',
+  'once', 'and', 'but', 'or', 'so', 'if', 'not', 'no', 'nor', 'as', 'than',
+  'too', 'very', 'just', 'want', 'need', 'get', 'got', 'like', 'please',
+]);
+
 function embedMock(text: string): number[] {
   const vector = new Array(EMBEDDING_DIM).fill(0);
-  const tokens = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const tokens = (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    (token) => !STOPWORDS.has(token),
+  );
   for (const token of tokens) {
     const hash = crypto.createHash('sha256').update(token).digest();
     for (let i = 0; i < 8; i++) {

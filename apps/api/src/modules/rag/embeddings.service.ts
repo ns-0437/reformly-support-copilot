@@ -4,6 +4,24 @@ import * as crypto from 'crypto';
 
 const EMBEDDING_DIM = 1536;
 
+// Without this, cosine similarity between ANY two English sentences is
+// inflated by shared function words ("you", "have", "a", "to"...) — enough
+// to clear a naive confidence threshold for completely unrelated queries.
+// A real embedding model doesn't have this failure mode; the mock has to
+// correct for it explicitly.
+const STOPWORDS = new Set([
+  'a', 'an', 'the', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him',
+  'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their', 'this',
+  'that', 'these', 'those', 'is', 'am', 'are', 'was', 'were', 'be', 'been',
+  'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+  'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'to', 'of',
+  'in', 'on', 'at', 'by', 'for', 'with', 'about', 'against', 'between',
+  'into', 'through', 'during', 'before', 'after', 'above', 'below', 'from',
+  'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then',
+  'once', 'and', 'but', 'or', 'so', 'if', 'not', 'no', 'nor', 'as', 'than',
+  'too', 'very', 'just', 'want', 'need', 'get', 'got', 'like', 'please',
+]);
+
 /**
  * Wraps whichever embedding provider is configured. Falls back to a
  * deterministic local hash-embedding when no OPENAI_API_KEY is set, so RAG
@@ -48,7 +66,9 @@ export class EmbeddingsService {
    */
   private embedMock(text: string): number[] {
     const vector = new Array(EMBEDDING_DIM).fill(0);
-    const tokens = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+    const tokens = (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+      (token) => !STOPWORDS.has(token),
+    );
     for (const token of tokens) {
       const hash = crypto.createHash('sha256').update(token).digest();
       for (let i = 0; i < 8; i++) {
