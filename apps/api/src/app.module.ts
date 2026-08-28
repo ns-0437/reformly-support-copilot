@@ -8,6 +8,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { RagModule } from './modules/rag/rag.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RagModule } from './modules/rag/rag.module';
     EscalationModule,
     WebhooksModule,
     ObservabilityModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
