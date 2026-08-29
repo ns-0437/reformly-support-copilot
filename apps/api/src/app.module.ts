@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -13,6 +15,9 @@ import { HealthModule } from './modules/health/health.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    // No self-protection existed before this — every route, including the
+    // unauthenticated public /chat/message, could be hit without limit.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
     PrismaModule,
     JobsModule,
     RagModule,
@@ -22,5 +27,6 @@ import { HealthModule } from './modules/health/health.module';
     ObservabilityModule,
     HealthModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

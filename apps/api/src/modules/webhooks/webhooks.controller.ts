@@ -1,7 +1,9 @@
 import { Body, Controller, Post } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { WebhooksService } from './webhooks.service';
 import { InboundWebhookDto } from './dto/inbound-webhook.dto';
 
+@ApiTags('webhooks')
 @Controller('webhooks')
 export class WebhooksController {
   constructor(private readonly webhooks: WebhooksService) {}
