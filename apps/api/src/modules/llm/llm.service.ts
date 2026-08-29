@@ -14,6 +14,12 @@ export interface ChatTurnResult {
   provider: 'anthropic' | 'mock';
 }
 
+interface OrderStatusOutput {
+  status: string;
+  estimatedShip?: string | null;
+  deliveredAt?: string | null;
+}
+
 const MAX_TOOL_ITERATIONS = 4;
 const MAX_STRUCTURED_OUTPUT_RETRIES = 2;
 
@@ -65,6 +71,22 @@ export class LlmService {
     });
 
     return result;
+  }
+
+  /**
+   * The extra date clause only makes sense for a subset of statuses — a
+   * refunded or delivered order showing a stale "estimated ship date"
+   * reads as broken, not just unhelpful.
+   */
+  private formatOrderStatus(orderId: string, output: OrderStatusOutput): string {
+    const base = `Order ${orderId} is currently "${output.status}".`;
+    if (output.status === 'pending' && output.estimatedShip) {
+      return `${base} Estimated ship date: ${new Date(output.estimatedShip).toDateString()}.`;
+    }
+    if (output.status === 'delivered' && output.deliveredAt) {
+      return `${base} Delivered on ${new Date(output.deliveredAt).toDateString()}.`;
+    }
+    return base;
   }
 
   private estimateCostUsd(usage: { inputTokens: number; outputTokens: number }, provider: string) {
@@ -253,7 +275,7 @@ export class LlmService {
       const found = (result.output as any)?.found;
       final = {
         responseText: found
-          ? `Order ${orderIdMatch[0].toUpperCase()} is currently "${(result.output as any).status}". ${(result.output as any).estimatedShip ? `Estimated ship date: ${new Date((result.output as any).estimatedShip).toDateString()}.` : ''}`
+          ? this.formatOrderStatus(orderIdMatch[0].toUpperCase(), result.output as OrderStatusOutput)
           : `I couldn't find order ${orderIdMatch[0].toUpperCase()} — could you double check the order number?`,
         selfReportedConfidence: result.success && found ? 0.9 : 0.4,
         citedSourceIds: [],
