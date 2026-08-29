@@ -1,7 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../lib/api';
+
+/**
+ * Calls this app's own /api/escalations proxy, not the backend directly —
+ * the proxy attaches the backend's admin credentials server-side, so this
+ * page only ever needs the browser to be authenticated to Next.js itself
+ * (via middleware.ts), never to hold the real credentials client-side.
+ */
+async function localApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${text}`);
+  }
+  return res.json();
+}
 
 interface Escalation {
   id: string;
@@ -21,7 +39,7 @@ export default function EscalationsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
-    const data = await apiFetch<Escalation[]>('/escalations');
+    const data = await localApiFetch<Escalation[]>('/api/escalations');
     setEscalations(data);
   }
 
@@ -32,7 +50,7 @@ export default function EscalationsPage() {
   async function resolve(id: string, action: 'approve' | 'edit' | 'reject') {
     setBusyId(id);
     try {
-      await apiFetch(`/escalations/${id}/resolve`, {
+      await localApiFetch(`/api/escalations/${id}/resolve`, {
         method: 'POST',
         body: JSON.stringify({
           action,

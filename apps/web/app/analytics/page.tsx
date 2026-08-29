@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../lib/api';
+
+/** See app/escalations/page.tsx for why this calls the local proxy, not the backend directly. */
+async function localApiFetch<T>(path: string): Promise<T> {
+  const res = await fetch(path, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json();
+}
 
 interface Summary {
   totalConversations: number;
@@ -24,7 +30,7 @@ export default function AnalyticsPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
 
   useEffect(() => {
-    apiFetch<Summary>('/analytics/summary').then(setSummary).catch(() => setSummary(null));
+    localApiFetch<Summary>('/api/analytics').then(setSummary).catch(() => setSummary(null));
   }, []);
 
   if (!summary) return <p className="text-slate-400 text-sm">Loading...</p>;
