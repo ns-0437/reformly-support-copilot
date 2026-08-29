@@ -1,8 +1,13 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { ApiBasicAuth, ApiTags } from '@nestjs/swagger';
 import { EscalationService } from './escalation.service';
 import { ResolveEscalationDto } from './dto/resolve-escalation.dto';
+import { AdminAuthGuard } from '../../common/guards/admin-auth.guard';
 
+@ApiTags('escalations')
+@ApiBasicAuth()
 @Controller('escalations')
+@UseGuards(AdminAuthGuard)
 export class EscalationController {
   constructor(private readonly escalations: EscalationService) {}
 
