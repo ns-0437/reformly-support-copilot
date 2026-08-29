@@ -31,4 +31,8 @@ export default () => ({
     failureRate: parseFloat(process.env.PROVIDER_FAILURE_RATE ?? '0.25'),
     timeoutRate: parseFloat(process.env.PROVIDER_TIMEOUT_RATE ?? '0.1'),
   },
+  admin: {
+    username: process.env.ADMIN_USERNAME || undefined,
+    password: process.env.ADMIN_PASSWORD || undefined,
+  },
 });
