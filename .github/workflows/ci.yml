@@ -78,3 +78,57 @@ jobs:
 
       - name: Build
         run: npm run build --workspace=apps/web
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build-only, no push — this is what actually catches a broken
+      # Dockerfile (missing OpenSSL for Prisma's query engine, wrong build
+      # context, etc.) automatically. Before this job existed, that class of
+      # bug was only ever caught by deploying by hand and watching it fail.
+      - name: Build API image
+        run: docker build -f apps/api/Dockerfile -t reformly-api:ci .
+
+  deploy:
+    needs: [api, web, docker-build]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          docker build -f apps/api/Dockerfile \
+            -t asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:${{ github.sha }} \
+            -t asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest \
+            .
+          docker push asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:${{ github.sha }}
+          docker push asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest
+
+      # Env vars (DATABASE_URL, REDIS_*, ADMIN_*, MOCK_LLM, ...) already live
+      # on the Cloud Run service from prior manual setup and are preserved
+      # across deploys that don't pass --set-env-vars/--update-env-vars.
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy reformly-api \
+            --image=asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:${{ github.sha }} \
+            --project=reformly-support-copilot \
+            --region=asia-south1
+
+      - name: Smoke test
+        run: |
+          sleep 5
+          curl -sf --max-time 20 https://reformly-api-721473915245.asia-south1.run.app/health
