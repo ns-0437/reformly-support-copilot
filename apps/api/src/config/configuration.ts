@@ -35,4 +35,8 @@ export default () => ({
     username: process.env.ADMIN_USERNAME || undefined,
     password: process.env.ADMIN_PASSWORD || undefined,
   },
+  webhooks: {
+    shopifySecret: process.env.SHOPIFY_WEBHOOK_SECRET || undefined,
+    stripeSecret: process.env.STRIPE_WEBHOOK_SECRET || undefined,
+  },
 });

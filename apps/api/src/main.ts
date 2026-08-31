@@ -8,7 +8,10 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   initSentry();
 
-  const app = await NestFactory.create(AppModule);
+  // Webhook signature verification needs the exact bytes that were signed —
+  // Nest's default JSON parsing re-serializes the body, which can differ
+  // byte-for-byte from what the provider actually hashed.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AllExceptionsFilter());
