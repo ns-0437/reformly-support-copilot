@@ -5,7 +5,7 @@ describe('ToolsService', () => {
     const prisma = {
       toolCall: { create: jest.fn().mockResolvedValue({}) },
       refundRequest: { findFirst: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
-      customer: { findUnique: jest.fn() },
+      conversation: { findUnique: jest.fn() },
     };
     const shopify = { getOrderByExternalId: jest.fn() };
     const stripe = { pauseSubscription: jest.fn() };
@@ -92,6 +92,26 @@ describe('ToolsService', () => {
 
     expect(result.success).toBe(false);
     expect((result.output as any).error).toBe('upstream 502');
+  });
+
+  it('get_subscription_status always resolves to the conversation\'s own customer, ignoring any email in the input', async () => {
+    const { service, prisma } = makeHarness();
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'conv-1',
+      customer: { id: 'cust-1', email: 'jane.doe@example.com', subscriptions: [{ id: 'sub-1', plan: 'monthly' }] },
+    });
+
+    // Regression test for an IDOR: get_subscription_status used to trust a
+    // client-supplied customerEmail directly, so any authenticated customer
+    // could read someone else's subscription just by typing their address.
+    const result = await service.execute('conv-1', 'get_subscription_status', {
+      customerEmail: 'someone-else@evil.example.com',
+    });
+
+    expect((result.output as any).subscriptions).toEqual([{ id: 'sub-1', plan: 'monthly' }]);
+    expect(prisma.conversation.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'conv-1' } }),
+    );
   });
 
   it('flags pause_subscription as requiring approval', async () => {
