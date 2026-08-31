@@ -87,12 +87,17 @@ export class ToolsService {
       }
 
       case 'get_subscription_status': {
-        const customer = await this.prisma.customer.findUnique({
-          where: { email: (input.customerEmail as string).toLowerCase() },
-          include: { subscriptions: true },
+        // Deliberately ignores any customerEmail the caller supplies. Trusting
+        // a model- or user-typed email here would let any authenticated
+        // customer read anyone else's subscription just by mentioning their
+        // address in chat. The only identity ever trusted is whichever
+        // customer this conversation actually belongs to.
+        const conversation = await this.prisma.conversation.findUnique({
+          where: { id: conversationId },
+          include: { customer: { include: { subscriptions: true } } },
         });
-        if (!customer) return { found: false };
-        return { found: true, subscriptions: customer.subscriptions };
+        if (!conversation) return { found: false };
+        return { found: true, subscriptions: conversation.customer.subscriptions };
       }
 
       case 'check_refund_eligibility': {

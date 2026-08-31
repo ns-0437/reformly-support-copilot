@@ -283,15 +283,17 @@ export class LlmService {
         riskFlags: [],
       };
     } else if (emailMatch) {
-      const result = await this.tools.execute(conversationId, 'get_subscription_status', {
-        customerEmail: emailMatch[0],
-      });
+      // The email pattern in the message is only used to trigger this intent
+      // branch — it is never passed to the tool. get_subscription_status
+      // always resolves to whichever customer this conversation actually
+      // belongs to, never to an address the customer happens to type.
+      const result = await this.tools.execute(conversationId, 'get_subscription_status', {});
       toolCalls.push(result);
       const found = (result.output as any)?.found;
       final = {
         responseText: found
-          ? `I found your account. Your subscription status: ${JSON.stringify((result.output as any).subscriptions.map((s: any) => ({ plan: s.plan, status: s.status })))}.`
-          : `I couldn't find an account for ${emailMatch[0]} — could you confirm the email on file?`,
+          ? `Your subscription status: ${JSON.stringify((result.output as any).subscriptions.map((s: any) => ({ plan: s.plan, status: s.status })))}.`
+          : "I couldn't find a subscription on your account — let me get a teammate to take a look.",
         selfReportedConfidence: result.success && found ? 0.85 : 0.4,
         citedSourceIds: [],
         requestsHumanReview: !result.success,

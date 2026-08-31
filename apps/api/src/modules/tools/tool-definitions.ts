@@ -20,13 +20,10 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_subscription_status',
     description:
-      "Look up a customer's app subscription status (active/paused/cancelled), plan, and renewal date by customer email.",
+      "Look up the current customer's own app subscription status (active/paused/cancelled), plan, and renewal date. Always resolves to whoever is authenticated on this conversation — there is no way to look up a different customer's subscription.",
     input_schema: {
       type: 'object',
-      properties: {
-        customerEmail: { type: 'string' },
-      },
-      required: ['customerEmail'],
+      properties: {},
     },
   },
   {
