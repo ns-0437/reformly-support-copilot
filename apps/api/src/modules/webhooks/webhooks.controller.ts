@@ -1,5 +1,5 @@
 import { Body, Controller, Headers, Post, Req, UnauthorizedException } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiHeader, ApiOperation, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { RawBodyRequest } from '@nestjs/common';
 import { Request } from 'express';
@@ -16,6 +16,12 @@ export class WebhooksController {
   ) {}
 
   @Post('shopify')
+  @ApiOperation({
+    summary: 'Inbound Shopify event',
+    description: 'Requires a valid HMAC-SHA256 signature over the raw request body, base64-encoded, in X-Shopify-Hmac-Sha256 — matching how Shopify itself signs webhook deliveries.',
+  })
+  @ApiHeader({ name: 'X-Shopify-Hmac-Sha256', description: 'HMAC-SHA256(rawBody, SHOPIFY_WEBHOOK_SECRET), base64-encoded', required: true })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid signature, or SHOPIFY_WEBHOOK_SECRET is not configured on this deployment' })
   shopify(
     @Body() body: InboundWebhookDto,
     @Req() req: RawBodyRequest<Request>,
@@ -38,6 +44,12 @@ export class WebhooksController {
   }
 
   @Post('stripe')
+  @ApiOperation({
+    summary: 'Inbound Stripe event',
+    description: 'Requires a valid Stripe-Signature header (t=<timestamp>,v1=<hmac>) — signatures older than 5 minutes are rejected as a replay, matching Stripe\'s own webhook signing scheme.',
+  })
+  @ApiHeader({ name: 'Stripe-Signature', description: 't=<unix-seconds>,v1=<hex HMAC-SHA256 of "timestamp.rawBody">', required: true })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid/expired signature, or STRIPE_WEBHOOK_SECRET is not configured on this deployment' })
   stripe(
     @Body() body: InboundWebhookDto,
     @Req() req: RawBodyRequest<Request>,
