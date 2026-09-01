@@ -39,4 +39,13 @@ export default () => ({
     shopifySecret: process.env.SHOPIFY_WEBHOOK_SECRET || undefined,
     stripeSecret: process.env.STRIPE_WEBHOOK_SECRET || undefined,
   },
+  cors: {
+    // Comma-separated allowlist. Defaults to the local dashboard's dev
+    // origin only — a wide-open CORS policy on an API that carries customer
+    // conversation data isn't a sane default for anything beyond localhost.
+    allowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  },
 });

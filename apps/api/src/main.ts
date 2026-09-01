@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { initSentry } from './observability/sentry';
@@ -12,7 +13,9 @@ async function bootstrap() {
   // Nest's default JSON parsing re-serializes the body, which can differ
   // byte-for-byte from what the provider actually hashed.
   const app = await NestFactory.create(AppModule, { rawBody: true });
-  app.enableCors();
+
+  const config = app.get(ConfigService);
+  app.enableCors({ origin: config.get<string[]>('cors.allowedOrigins') });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AllExceptionsFilter());
 
