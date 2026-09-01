@@ -18,11 +18,18 @@ export class EscalationService {
     });
   }
 
-  async listPending() {
+  /**
+   * Unbounded before this — fine while the queue is empty in a demo, not
+   * fine once real volume shows up. `limit` is clamped rather than trusted
+   * outright, so a client can't request an arbitrarily large page.
+   */
+  async listPending(limit = 50) {
+    const take = Math.min(Math.max(limit, 1), 100);
     return this.prisma.escalation.findMany({
       where: { status: 'pending' },
       include: { conversation: { include: { customer: true, messages: { orderBy: { createdAt: 'asc' } } } } },
       orderBy: { createdAt: 'asc' },
+      take,
     });
   }
 

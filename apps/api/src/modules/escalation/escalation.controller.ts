@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
-import { ApiBasicAuth, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBasicAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { EscalationService } from './escalation.service';
 import { ResolveEscalationDto } from './dto/resolve-escalation.dto';
 import { AdminAuthGuard } from '../../common/guards/admin-auth.guard';
@@ -12,8 +12,9 @@ export class EscalationController {
   constructor(private readonly escalations: EscalationService) {}
 
   @Get()
-  list() {
-    return this.escalations.listPending();
+  @ApiQuery({ name: 'limit', required: false, description: 'Max items to return (default 50, capped at 100)' })
+  list(@Query('limit', new ParseIntPipe({ optional: true })) limit?: number) {
+    return this.escalations.listPending(limit);
   }
 
   @Post(':id/resolve')

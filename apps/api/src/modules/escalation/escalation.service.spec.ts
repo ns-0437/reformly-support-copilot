@@ -16,6 +16,24 @@ describe('EscalationService', () => {
     return { service, prisma };
   }
 
+  it('listPending defaults to a bounded page instead of returning everything', async () => {
+    const { service, prisma } = makeHarness();
+    prisma.escalation.findMany.mockResolvedValue([]);
+
+    await service.listPending();
+
+    expect(prisma.escalation.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 50 }));
+  });
+
+  it('clamps an oversized requested limit rather than trusting it outright', async () => {
+    const { service, prisma } = makeHarness();
+    prisma.escalation.findMany.mockResolvedValue([]);
+
+    await service.listPending(10000);
+
+    expect(prisma.escalation.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }));
+  });
+
   it('throws NotFoundException when resolving an escalation that does not exist', async () => {
     const { service, prisma } = makeHarness();
     prisma.escalation.findUnique.mockResolvedValue(null);
