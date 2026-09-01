@@ -69,7 +69,10 @@ export class StripeProvider {
    * so "decide" and "move money" are different steps — the latter runs in a
    * background job (see RefundProcessor) rather than blocking the chat reply.
    */
-  async issueRefund(amountCents: number): Promise<{ processorRefundId: string }> {
+  // amountCents isn't used by the mock body below, but stays part of the
+  // signature — a real Stripe refund call needs it, and dropping it now
+  // would silently break the interface once this stops being a stand-in.
+  async issueRefund(_amountCents: number): Promise<{ processorRefundId: string }> {
     return retryWithBackoff(async () => {
       await this.simulateFlakiness();
       return { processorRefundId: `re_${Math.random().toString(36).slice(2, 12)}` };

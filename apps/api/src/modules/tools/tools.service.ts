@@ -38,7 +38,10 @@ export class ToolsService {
     const requiresApproval = HIGH_RISK_TOOLS.has(toolName);
     let success = false;
     let output: unknown;
-    let retries = 0;
+    // Retries already happen one layer down (retryWithBackoff inside each
+    // provider) and aren't surfaced back up here yet, so this is always 0 —
+    // not wired up to mean anything yet, not worth pretending otherwise.
+    const retries = 0;
 
     try {
       output = await this.dispatch(toolName, input, conversationId);

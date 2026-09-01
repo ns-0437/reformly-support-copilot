@@ -58,6 +58,9 @@ jobs:
       - name: Apply migrations
         run: npm run prisma:deploy --workspace=apps/api
 
+      - name: Lint
+        run: npm run lint --workspace=apps/api
+
       - name: Build
         run: npm run build --workspace=apps/api
 
