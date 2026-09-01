@@ -1,0 +1,9 @@
+# Normalize line endings to LF in the repository regardless of the checkout
+# platform's default — every commit on this Windows machine has been warning
+# "LF will be replaced by CRLF" because nothing pinned this before.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
