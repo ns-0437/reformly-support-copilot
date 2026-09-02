@@ -23,7 +23,10 @@ async function bootstrap() {
 
   const config = app.get(ConfigService);
   app.enableCors({ origin: config.get<string[]>('cors.allowedOrigins') });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // forbidNonWhitelisted turns an unexpected field into a clear 400 instead
+  // of whitelist:true's default of silently dropping it — a client with a
+  // typo'd field name deserves an error, not data quietly going nowhere.
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.useGlobalFilters(new AllExceptionsFilter());
 
   const swaggerConfig = new DocumentBuilder()
