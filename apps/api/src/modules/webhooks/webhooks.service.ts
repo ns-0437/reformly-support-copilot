@@ -8,6 +8,13 @@ interface InboundWebhook {
   payload: Record<string, unknown>;
 }
 
+// Mirrors the comment on Order.status / Subscription.status in schema.prisma
+// — a validly-signed webhook with a malformed or unexpected status value
+// (a sender bug, a typo, an API version drift) got written straight into
+// the domain model before this, with nothing to catch it.
+const VALID_ORDER_STATUSES = new Set(['pending', 'fulfilled', 'shipped', 'delivered', 'delayed', 'refunded']);
+const VALID_SUBSCRIPTION_STATUSES = new Set(['active', 'paused', 'cancelled', 'past_due']);
+
 /**
  * Real Shopify/Stripe webhooks can and do arrive more than once for the same
  * event (retried delivery after a slow 2xx, at-least-once delivery
@@ -57,6 +64,9 @@ export class WebhooksService {
   private async applySideEffect(event: InboundWebhook): Promise<void> {
     if (event.provider === 'shopify' && event.eventType === 'order.status_changed') {
       const { orderExternalId, status } = event.payload as { orderExternalId: string; status: string };
+      if (!VALID_ORDER_STATUSES.has(status)) {
+        throw new Error(`Rejected order.status_changed with unknown status "${status}"`);
+      }
       await this.prisma.order.update({ where: { externalId: orderExternalId }, data: { status } });
       return;
     }
@@ -66,6 +76,9 @@ export class WebhooksService {
         subscriptionExternalId: string;
         status: string;
       };
+      if (!VALID_SUBSCRIPTION_STATUSES.has(status)) {
+        throw new Error(`Rejected subscription.updated with unknown status "${status}"`);
+      }
       await this.prisma.subscription.update({ where: { externalId: subscriptionExternalId }, data: { status } });
       return;
     }

@@ -24,7 +24,7 @@ model Order {
   customerId     String
   customer       Customer @relation(fields: [customerId], references: [id])
   externalId     String   @unique // simulated Shopify order id
-  status         String // pending | fulfilled | shipped | delivered | delayed
+  status         String // pending | fulfilled | shipped | delivered | delayed | refunded
   productName    String
   amountCents    Int
   currency       String   @default("GBP")

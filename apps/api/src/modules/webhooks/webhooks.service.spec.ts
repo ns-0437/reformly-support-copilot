@@ -69,6 +69,34 @@ describe('WebhooksService', () => {
     );
   });
 
+  it('rejects an order status outside the known domain enum instead of writing it through', async () => {
+    const { service, prisma } = makeHarness();
+
+    const result = await service.handle({
+      provider: 'shopify',
+      externalEventId: 'evt_bad_status',
+      eventType: 'order.status_changed',
+      payload: { orderExternalId: 'RFM-1', status: 'totally-made-up-status' },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a subscription status outside the known domain enum instead of writing it through', async () => {
+    const { service, prisma } = makeHarness();
+
+    const result = await service.handle({
+      provider: 'stripe',
+      externalEventId: 'evt_bad_sub_status',
+      eventType: 'subscription.updated',
+      payload: { subscriptionExternalId: 'sub_1', status: 'totally-made-up-status' },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(prisma.subscription.update).not.toHaveBeenCalled();
+  });
+
   it('stores but does not crash on an event type with no registered handler', async () => {
     const { service, prisma } = makeHarness();
 
