@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -12,7 +13,13 @@ async function bootstrap() {
   // Webhook signature verification needs the exact bytes that were signed —
   // Nest's default JSON parsing re-serializes the body, which can differ
   // byte-for-byte from what the provider actually hashed.
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+
+  // Cloud Run sits in front of this as a single reverse-proxy hop. Without
+  // this, Express sees every request as coming from that proxy's internal
+  // address, not the real client — so ThrottlerGuard's per-IP rate limit
+  // was effectively bucketing every visitor together instead of separately.
+  app.set('trust proxy', 1);
 
   const config = app.get(ConfigService);
   app.enableCors({ origin: config.get<string[]>('cors.allowedOrigins') });
