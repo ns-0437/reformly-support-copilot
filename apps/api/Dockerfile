@@ -21,10 +21,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/apps/api/dist ./apps/api/dist
+COPY --from=builder --chown=node:node /app/apps/api/prisma ./apps/api/prisma
+COPY --from=builder --chown=node:node /app/apps/api/package.json ./apps/api/package.json
+
+# node:*-slim images ship a non-root "node" user (uid 1000) — nothing here
+# needs root, and running the container as root by default was never an
+# intentional choice, just the base image's default left unchanged.
+USER node
 
 # Cloud Run injects PORT (defaults to 8080); main.ts already reads process.env.PORT.
 EXPOSE 8080
