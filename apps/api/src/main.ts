@@ -3,6 +3,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { initSentry } from './observability/sentry';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -20,6 +21,13 @@ async function bootstrap() {
   // address, not the real client — so ThrottlerGuard's per-IP rate limit
   // was effectively bucketing every visitor together instead of separately.
   app.set('trust proxy', 1);
+
+  // CSP off: this is a JSON API plus the Swagger UI at /docs, which needs
+  // inline scripts/styles that helmet's default CSP blocks by default. The
+  // other headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.)
+  // stay on — CSP is the one that needs page-specific tuning to be useful,
+  // and getting it wrong silently breaks /docs rather than failing loudly.
+  app.use(helmet({ contentSecurityPolicy: false }));
 
   const config = app.get(ConfigService);
   app.enableCors({ origin: config.get<string[]>('cors.allowedOrigins') });

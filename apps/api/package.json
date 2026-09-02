@@ -27,6 +27,7 @@
     "bullmq": "^5.13.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "helmet": "^8.0.0",
     "nanoid": "^3.3.7",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
