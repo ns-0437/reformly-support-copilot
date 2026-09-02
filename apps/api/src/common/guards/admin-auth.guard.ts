@@ -3,6 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { createHash, timingSafeEqual } from 'crypto';
 
+/** The identity Basic Auth actually verified — set by AdminAuthGuard, read wherever "who did this" needs to be trustworthy rather than self-reported. */
+export interface AuthenticatedAdminRequest extends Request {
+  adminUser: string;
+}
+
 /** Constant-time string comparison — a plain `!==` leaks timing information proportional to the matching prefix length. */
 function safeEqual(a: string, b: string): boolean {
   const hashA = createHash('sha256').update(a).digest();
@@ -44,6 +49,7 @@ export class AdminAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    (request as AuthenticatedAdminRequest).adminUser = user;
     return true;
   }
 }

@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBasicAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { EscalationService } from './escalation.service';
 import { ResolveEscalationDto } from './dto/resolve-escalation.dto';
-import { AdminAuthGuard } from '../../common/guards/admin-auth.guard';
+import { AdminAuthGuard, AuthenticatedAdminRequest } from '../../common/guards/admin-auth.guard';
 
 @ApiTags('escalations')
 @ApiBasicAuth()
@@ -18,7 +18,7 @@ export class EscalationController {
   }
 
   @Post(':id/resolve')
-  resolve(@Param('id') id: string, @Body() body: ResolveEscalationDto) {
-    return this.escalations.resolve(id, body);
+  resolve(@Param('id') id: string, @Body() body: ResolveEscalationDto, @Req() req: AuthenticatedAdminRequest) {
+    return this.escalations.resolve(id, { ...body, reviewedBy: req.adminUser });
   }
 }

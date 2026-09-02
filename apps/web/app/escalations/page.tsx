@@ -52,10 +52,13 @@ export default function EscalationsPage() {
     try {
       await localApiFetch(`/api/escalations/${id}/resolve`, {
         method: 'POST',
+        // No reviewedBy here — the backend derives it from the Basic Auth
+        // identity that authenticated the request, not from anything the
+        // client claims. Sending it would now be rejected outright: the API
+        // whitelists request fields strictly since the last hardening pass.
         body: JSON.stringify({
           action,
           finalResponse: action === 'edit' ? drafts[id] : undefined,
-          reviewedBy: 'founder-demo@reformly.com',
         }),
       });
       await load();
