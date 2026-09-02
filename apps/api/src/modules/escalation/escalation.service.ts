@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { ReliabilityAssessment } from '../reliability/reliability.service';
 
@@ -45,6 +45,14 @@ export class EscalationService {
   ) {
     const escalation = await this.prisma.escalation.findUnique({ where: { id: escalationId } });
     if (!escalation) throw new NotFoundException('Escalation not found');
+    // Nothing stopped this from running twice - a double-click, a retried
+    // request, or two admins racing on the same item would each append
+    // another human_agent message to the customer and silently overwrite
+    // who gets credited as reviewer. Every other side-effecting path in this
+    // codebase is idempotent; this one wasn't.
+    if (escalation.status !== 'pending') {
+      throw new ConflictException(`Escalation already ${escalation.status}`);
+    }
 
     const finalResponse =
       decision.action === 'reject'
