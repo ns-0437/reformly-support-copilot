@@ -34,4 +34,12 @@ USER node
 # Cloud Run injects PORT (defaults to 8080); main.ts already reads process.env.PORT.
 EXPOSE 8080
 WORKDIR /app/apps/api
+
+# Cloud Run uses its own startup/liveness probes and ignores this, but any
+# other orchestrator (plain `docker run`, Compose, a different platform)
+# gets nothing without it. No curl/wget in this slim image, so this calls
+# the real /health endpoint with Node itself instead of adding a dependency.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||8080)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
