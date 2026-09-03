@@ -38,10 +38,18 @@ export class ChatService {
       data: { conversationId: conversation.id, role: 'customer', content: dto.message },
     });
 
-    const priorMessages = await this.prisma.message.findMany({
+    // Unbounded before this — every turn loaded the entire conversation
+    // history and handed all of it to the LLM as context, so both the query
+    // and the token cost grew linearly with conversation length forever.
+    // Fetched newest-first with a cap, then reversed back to chronological
+    // order for the model.
+    const MAX_HISTORY_MESSAGES = 20;
+    const recentMessages = await this.prisma.message.findMany({
       where: { conversationId: conversation.id },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_HISTORY_MESSAGES,
     });
+    const priorMessages = recentMessages.reverse();
 
     const history = priorMessages
       .filter((m) => m.role === 'customer' || m.role === 'agent')

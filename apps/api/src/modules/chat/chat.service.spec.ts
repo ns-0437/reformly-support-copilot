@@ -62,6 +62,52 @@ describe('ChatService', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
+  it('caps history fetch to the most recent messages instead of loading the whole conversation', async () => {
+    const { service, prisma, llm, reliability } = makeHarness();
+    llm.generateResponse.mockResolvedValue({ final: makeFinal(), toolCalls: [] });
+    reliability.assess.mockReturnValue({ shouldEscalate: false, combinedConfidence: 0.9, reason: null });
+
+    await service.handleMessage({
+      customerEmail: 'jane.doe@example.com',
+      conversationId: 'conv-1',
+      message: 'hi',
+    } as any);
+
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: 'desc' }, take: 20 }),
+    );
+  });
+
+  it('passes history to the LLM in chronological order despite fetching newest-first', async () => {
+    const { service, prisma, llm, reliability } = makeHarness();
+    // findMany with orderBy desc + take returns newest-first — this proves
+    // it gets reversed back to oldest-first before the LLM sees it, not
+    // left in fetch order (which would scramble the conversation for the
+    // model to reason about).
+    prisma.message.findMany.mockResolvedValue([
+      { role: 'agent', content: 'second reply' },
+      { role: 'customer', content: 'second question' },
+      { role: 'agent', content: 'first reply' },
+      { role: 'customer', content: 'first question' },
+    ]);
+    llm.generateResponse.mockResolvedValue({ final: makeFinal(), toolCalls: [] });
+    reliability.assess.mockReturnValue({ shouldEscalate: false, combinedConfidence: 0.9, reason: null });
+
+    await service.handleMessage({
+      customerEmail: 'jane.doe@example.com',
+      conversationId: 'conv-1',
+      message: 'third question',
+    } as any);
+
+    const [, history] = llm.generateResponse.mock.calls[0];
+    expect(history.map((h: any) => h.content)).toEqual([
+      'first question',
+      'first reply',
+      'second question',
+      'second reply',
+    ]);
+  });
+
   it('creates a fresh conversation when no conversationId is given', async () => {
     const { service, prisma, llm, reliability } = makeHarness();
     llm.generateResponse.mockResolvedValue({ final: makeFinal(), toolCalls: [] });
