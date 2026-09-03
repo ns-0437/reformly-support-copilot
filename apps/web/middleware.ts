@@ -9,7 +9,28 @@ import { NextRequest, NextResponse } from 'next/server';
  * Runs BEFORE any client JS loads, so a browser hitting these paths gets its
  * native credential prompt on page load, not a broken fetch after the fact.
  */
-export function middleware(request: NextRequest) {
+
+/**
+ * Constant-time comparison via SHA-256 digest — a plain `===` leaks timing
+ * information proportional to the matching prefix length, which is exactly
+ * what AdminAuthGuard on the backend already fixed once. This middleware
+ * runs in the Edge runtime, which doesn't have Node's crypto.timingSafeEqual,
+ * so it uses the Web Crypto API instead.
+ */
+async function safeEqual(a: string, b: string): Promise<boolean> {
+  const [hashA, hashB] = await Promise.all([sha256(a), sha256(b)]);
+  if (hashA.length !== hashB.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hashA.length; i++) diff |= hashA[i] ^ hashB[i];
+  return diff === 0;
+}
+
+async function sha256(input: string): Promise<Uint8Array> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return new Uint8Array(digest);
+}
+
+export async function middleware(request: NextRequest) {
   const expectedUser = process.env.ADMIN_USERNAME;
   const expectedPass = process.env.ADMIN_PASSWORD;
 
@@ -23,7 +44,8 @@ export function middleware(request: NextRequest) {
     const separatorIndex = decoded.indexOf(':');
     const user = decoded.slice(0, separatorIndex);
     const pass = decoded.slice(separatorIndex + 1);
-    if (user === expectedUser && pass === expectedPass) {
+    const [userOk, passOk] = await Promise.all([safeEqual(user, expectedUser), safeEqual(pass, expectedPass)]);
+    if (userOk && passOk) {
       return NextResponse.next();
     }
   }
