@@ -5,6 +5,7 @@ import { ShopifyProvider } from './providers/shopify.provider';
 import { StripeProvider } from './providers/stripe.provider';
 import { RagService } from '../rag/rag.service';
 import { HIGH_RISK_TOOLS, ToolName } from './tool-definitions';
+import { validateToolInput } from './tool-input.schemas';
 import { RefundQueueProducer } from '../jobs/refund-queue.producer';
 
 export interface ToolExecutionResult {
@@ -44,7 +45,8 @@ export class ToolsService {
     const retries = 0;
 
     try {
-      output = await this.dispatch(toolName, input, conversationId);
+      const validatedInput = validateToolInput(toolName, input);
+      output = await this.dispatch(toolName, validatedInput, conversationId);
       success = true;
     } catch (err) {
       output = { error: (err as Error).message };

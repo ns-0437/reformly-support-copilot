@@ -94,6 +94,28 @@ describe('ToolsService', () => {
     expect((result.output as any).error).toBe('upstream 502');
   });
 
+  it('rejects a tool call missing a required field before it ever reaches a Prisma/provider call', async () => {
+    const { service, shopify } = makeHarness();
+
+    const result = await service.execute('conv-1', 'get_order_status', {});
+
+    expect(result.success).toBe(false);
+    expect((result.output as any).error).toContain('Invalid input for get_order_status');
+    expect(shopify.getOrderByExternalId).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid resumeAtIso instead of letting `new Date("garbage")` become an Invalid Date write', async () => {
+    const { service, stripe } = makeHarness();
+
+    const result = await service.execute('conv-1', 'pause_subscription', {
+      subscriptionExternalId: 'sub_1',
+      resumeAtIso: 'not-a-real-date',
+    });
+
+    expect(result.success).toBe(false);
+    expect(stripe.pauseSubscription).not.toHaveBeenCalled();
+  });
+
   it('get_subscription_status always resolves to the conversation\'s own customer, ignoring any email in the input', async () => {
     const { service, prisma } = makeHarness();
     prisma.conversation.findUnique.mockResolvedValue({
