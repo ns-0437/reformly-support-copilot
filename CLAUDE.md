@@ -23,6 +23,12 @@ implemented, not just described.
 10. **Mock mode is a first-class code path, not a stub.** `MOCK_LLM=true` (default) runs a deterministic rule-based responder that still calls the *real* `ToolsService`/`RagService`/Postgres/BullMQ — only the "which tool to call" decision is rule-based. Flipping `MOCK_LLM=false` + setting `ANTHROPIC_API_KEY` swaps in real Claude tool-calling without touching any other module. Same applies to `MOCK_EMBEDDINGS`.
 11. **RAG grounding is mandatory for policy answers**: the agent is instructed to call `search_knowledge_base` rather than answer shipping/refund/subscription policy from parametric knowledge, and `citedSourceIds` in the structured response ties the answer back to a specific `KnowledgeDocument` row.
 12. **Refund eligibility and refund processing are two separate steps on purpose**: `check_refund_eligibility` (tools.service.ts) decides and marks a `RefundRequest` `eligible`; the actual money movement happens asynchronously in `RefundProcessor` so a slow payment-processor call never blocks the chat response.
+13. **Never trust a client-supplied identity when the request is already authenticated.** `get_subscription_status` resolves via the conversation's own customer relation, not a `customerEmail` the caller passes (was an IDOR — any customer could read anyone else's subscription by typing their email). `EscalationController` derives `reviewedBy` from the Basic Auth username `AdminAuthGuard` actually verified, not a request-body field. Same principle, two places it was missing.
+14. **`/escalations` and `/analytics` require HTTP Basic Auth** (`ADMIN_USERNAME`/`ADMIN_PASSWORD`, unset = locked out entirely, not open) — on both the API (`AdminAuthGuard`) and the dashboard (`apps/web/middleware.ts`, which runs *before* any client JS loads). Both use a constant-time comparison; a plain `===`/`!==` on a shared secret leaks timing information proportional to the matching prefix.
+15. **Every side-effecting endpoint needs its own idempotency story, not just webhooks/jobs.** `EscalationService.resolve()` checks `status === 'pending'` before applying anything — without it, a double-click or retried request would append a second message to the customer and silently overwrite the audit trail.
+16. **Inbound webhooks are signature-verified, not just deduplicated.** The `WebhookEvent` unique constraint stops a *legitimate* event from being applied twice; it never checked the payload actually came from the provider. `webhook-signature.util.ts` verifies Shopify's HMAC-over-raw-body and Stripe's timestamped HMAC (with replay-window rejection) before anything touches the DB — `rawBody: true` is set in `main.ts` specifically so the exact signed bytes are available, since Nest's default JSON parsing re-serializes the body.
+17. **Tool inputs and webhook payload values are validated, not cast.** `validateToolInput` (Zod, mirrors each tool's Anthropic-facing schema) runs before `ToolsService.dispatch`; `WebhooksService.applySideEffect` checks `status` against the same enum documented on the Prisma schema before writing it. Both replaced a blind `as string`/passthrough that would otherwise let a malformed value reach a Prisma call with a confusing error, or (for webhooks) silently corrupt the record.
+18. **`/health` checks both real dependencies, not one.** Postgres and Redis are pinged concurrently (`RefundQueueProducer.ping()` for the latter) — a broken Redis connection is exactly what caused Incident 2 below, with zero signal from a naive DB-only check.
 
 ## Code structure
 
@@ -74,6 +80,12 @@ Default `.env` runs with `MOCK_LLM=true` / `MOCK_EMBEDDINGS=true` — no API
 keys required to see the full pipeline (tool-calling, RAG, escalation,
 background jobs) working. Set `ANTHROPIC_API_KEY` and `MOCK_LLM=false` to
 swap in real Claude for the actual interview demo.
+
+Set `ADMIN_USERNAME`/`ADMIN_PASSWORD` to reach `/escalations` or `/analytics`
+locally — unset means both are locked out, not open. Webhook endpoints need
+`SHOPIFY_WEBHOOK_SECRET`/`STRIPE_WEBHOOK_SECRET` set the same way before
+they'll accept anything (see `.env.example` for how to sign a local test
+request). Full docs at `/docs` (Swagger).
 
 ## Live deployment
 
