@@ -34,4 +34,8 @@ Try in the chat UI (`/`):
 - `I want a refund for RFM-10234, it arrived broken`
 - `Can I pause my subscription for a month?` (routes to human review — see `/escalations`)
 
+`/escalations` and `/analytics` require `ADMIN_USERNAME`/`ADMIN_PASSWORD` (HTTP
+Basic Auth, both API and dashboard) — unset means locked out, not open. API
+docs at `/docs` (Swagger).
+
 See [CLAUDE.md](CLAUDE.md) for architecture notes and working rules.
