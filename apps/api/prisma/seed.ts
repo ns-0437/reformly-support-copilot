@@ -76,7 +76,15 @@ async function seedKnowledgeBase() {
     },
   ];
 
+  // No unique constraint on title to upsert against, so re-running this is
+  // guarded by an explicit existence check instead — createMany would have
+  // thrown on a second run, and skipping that error would've meant silently
+  // not knowing whether seeding actually happened.
+  let seededCount = 0;
   for (const doc of docs) {
+    const existing = await prisma.knowledgeDocument.findFirst({ where: { title: doc.title } });
+    if (existing) continue;
+
     const created = await prisma.knowledgeDocument.create({
       data: { title: doc.title, category: doc.category, content: doc.content },
     });
@@ -86,52 +94,63 @@ async function seedKnowledgeBase() {
       `[${embedding.join(',')}]`,
       created.id,
     );
+    seededCount++;
   }
-  console.log(`Seeded ${docs.length} knowledge base documents`);
+  console.log(`Seeded ${seededCount} new knowledge base documents (${docs.length - seededCount} already present)`);
 }
 
 async function seedCustomers() {
-  const customer = await prisma.customer.create({
-    data: { email: 'jane.doe@example.com', name: 'Jane Doe' },
+  // upsert throughout — email/externalId are genuinely unique, so re-running
+  // this is safe and just confirms the demo data still matches, rather than
+  // throwing on the second run like the original createMany-based version did.
+  const customer = await prisma.customer.upsert({
+    where: { email: 'jane.doe@example.com' },
+    create: { email: 'jane.doe@example.com', name: 'Jane Doe' },
+    update: {},
   });
 
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
 
-  await prisma.order.createMany({
-    data: [
-      {
-        customerId: customer.id,
-        externalId: 'RFM-10234',
-        status: 'shipped',
-        productName: 'Reformly Reformer Board',
-        amountCents: 24900,
-        placedAt: new Date(now - 10 * day),
-        estimatedShip: new Date(now - 7 * day),
-      },
-      {
-        customerId: customer.id,
-        externalId: 'RFM-10190',
-        status: 'delivered',
-        productName: 'Reformly Reformer Board + Resistance Kit',
-        amountCents: 29900,
-        placedAt: new Date(now - 45 * day),
-        deliveredAt: new Date(now - 38 * day),
-      },
-    ],
-  });
+  const orders = [
+    {
+      externalId: 'RFM-10234',
+      status: 'shipped',
+      productName: 'Reformly Reformer Board',
+      amountCents: 24900,
+      placedAt: new Date(now - 10 * day),
+      estimatedShip: new Date(now - 7 * day),
+    },
+    {
+      externalId: 'RFM-10190',
+      status: 'delivered',
+      productName: 'Reformly Reformer Board + Resistance Kit',
+      amountCents: 29900,
+      placedAt: new Date(now - 45 * day),
+      deliveredAt: new Date(now - 38 * day),
+    },
+  ];
+  for (const order of orders) {
+    await prisma.order.upsert({
+      where: { externalId: order.externalId },
+      create: { ...order, customerId: customer.id },
+      update: {},
+    });
+  }
 
-  await prisma.subscription.create({
-    data: {
+  await prisma.subscription.upsert({
+    where: { externalId: 'sub_reformly_001' },
+    create: {
       customerId: customer.id,
       externalId: 'sub_reformly_001',
       plan: 'monthly',
       status: 'active',
       renewsAt: new Date(now + 12 * day),
     },
+    update: {},
   });
 
-  console.log(`Seeded customer ${customer.email} with 2 orders + 1 subscription`);
+  console.log(`Seeded customer ${customer.email} with ${orders.length} orders + 1 subscription`);
 }
 
 async function main() {
