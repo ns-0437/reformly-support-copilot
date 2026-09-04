@@ -13,6 +13,9 @@
     "db:down": "docker compose down",
     "prisma:generate": "npm run prisma:generate --workspace=apps/api",
     "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
-    "seed": "npm run seed --workspace=apps/api"
+    "seed": "npm run seed --workspace=apps/api",
+    "test": "npm test --workspace=apps/api",
+    "lint": "npm run lint --workspace=apps/api",
+    "build": "npm run build --workspace=apps/api && npm run build --workspace=apps/web"
   }
 }
