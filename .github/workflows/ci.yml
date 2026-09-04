@@ -84,15 +84,39 @@ jobs:
 
   docker-build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
-      # Build-only, no push — this is what actually catches a broken
-      # Dockerfile (missing OpenSSL for Prisma's query engine, wrong build
-      # context, etc.) automatically. Before this job existed, that class of
-      # bug was only ever caught by deploying by hand and watching it fail.
+      # This is what actually catches a broken Dockerfile (missing OpenSSL
+      # for Prisma's query engine, wrong build context, etc.) automatically
+      # — before this job existed, that class of bug was only ever caught
+      # by deploying by hand and watching it fail.
       - name: Build API image
         run: docker build -f apps/api/Dockerfile -t reformly-api:ci .
+
+      # Only push what's actually going to be deployed — pushing on every
+      # PR build would tag and upload an image for commits nothing ever
+      # deploys. Building the same image twice (once here, once again in a
+      # separate deploy job) used to double the build time/cost on every
+      # push to master for no benefit; this job now does both in one pass.
+      - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        name: Push image
+        run: |
+          gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+          docker tag reformly-api:ci asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:${{ github.sha }}
+          docker tag reformly-api:ci asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest
+          docker push asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:${{ github.sha }}
+          docker push asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest
 
   deploy:
     needs: [api, web, docker-build]
@@ -101,25 +125,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
-
-      - name: Build and push image
-        run: |
-          docker build -f apps/api/Dockerfile \
-            -t asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:${{ github.sha }} \
-            -t asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest \
-            .
-          docker push asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:${{ github.sha }}
-          docker push asia-south1-docker.pkg.dev/reformly-support-copilot/reformly/api:latest
 
       # Env vars (DATABASE_URL, REDIS_*, ADMIN_*, MOCK_LLM, ...) already live
       # on the Cloud Run service from prior manual setup and are preserved
