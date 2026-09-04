@@ -104,13 +104,4 @@ export class ChatService {
       confidence: assessment.combinedConfidence,
     };
   }
-
-  async getConversation(conversationId: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
-      include: { messages: { orderBy: { createdAt: 'asc' } }, customer: true },
-    });
-    if (!conversation) throw new NotFoundException(`No conversation with id ${conversationId}`);
-    return conversation;
-  }
 }
