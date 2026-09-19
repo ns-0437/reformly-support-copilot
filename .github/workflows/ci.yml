@@ -39,7 +39,7 @@ jobs:
       MOCK_LLM: "true"
       MOCK_EMBEDDINGS: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -73,7 +73,7 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -90,7 +90,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # This is what actually catches a broken Dockerfile (missing OpenSSL
       # for Prisma's query engine, wrong build context, etc.) automatically
