@@ -110,7 +110,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         name: Push image
@@ -132,7 +132,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
 
       # Env vars (DATABASE_URL, REDIS_*, ADMIN_*, MOCK_LLM, ...) already live
       # on the Cloud Run service from prior manual setup and are preserved
