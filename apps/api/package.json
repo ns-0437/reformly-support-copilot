@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
-    "@nestjs/bullmq": "^10.2.3",
+    "@nestjs/bullmq": "^12.0.0",
     "@nestjs/common": "^10.4.4",
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.4.4",
@@ -52,6 +52,9 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared)/)"
+    ],
     "testEnvironment": "node"
   }
 }

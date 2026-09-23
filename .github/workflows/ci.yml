@@ -41,9 +41,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # @nestjs/bullmq 12 (and @nestjs/bull-shared) publish ESM-only, no CJS build
+      # (package.json: "type": "module", exports.require -> the same dist/index.js).
+      # Node's require() can only load that synchronously from v22.12 on; under
+      # Node 20 the built app crashes on boot with ERR_REQUIRE_ESM the moment Nest's
+      # DI requires the module, even though it builds and type-checks fine. This job
+      # never actually boots the app (build only type-checks; docker-build below
+      # builds the image on node:25-slim, matching what's actually deployed), so it
+      # wouldn't have caught this -- bumped so a contributor running `npm run
+      # start:dev` locally against this same Node version doesn't hit it either.
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - run: npm ci
