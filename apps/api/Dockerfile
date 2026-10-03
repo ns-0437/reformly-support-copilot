@@ -1,7 +1,7 @@
 # Build context is the repo root (npm workspaces need the root lockfile):
 #   docker build -f apps/api/Dockerfile .
 
-FROM node:25-slim AS builder
+FROM node:26-slim AS builder
 WORKDIR /app
 # Prisma's query engine needs a matching OpenSSL on the base image, or it
 # silently guesses wrong and fails to connect at runtime.
@@ -16,7 +16,7 @@ COPY apps/api apps/api
 RUN npm run prisma:generate --workspace=apps/api
 RUN npm run build --workspace=apps/api
 
-FROM node:25-slim AS runner
+FROM node:26-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
